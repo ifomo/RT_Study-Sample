@@ -3,20 +3,22 @@
  * 2023-05-31     vdadh        RT-Thread学习--设备和驱动/I2C总线设备
  * -驱动教学霍尔前端板上的MS1100数模转换器
  * -博客参考: https://www.jianshu.com/p/e0b448995316?from=singlemessage
+ * -尝试使用硬件I2C--失败，因为一开始使用的是基于 HAL库的硬件I2C版本--成功，
+ * -后续我想基于F103_RT2完成硬件I2C的移植
  */
 #include <rtthread.h>
 #include <rtdevice.h>
 #include "drv_common.h"
 
 //#define LED_PIN_NUM 66  //PE2
-#define LED_PIN_NUM GET_PIN(E, 12)
+#define LED_PIN_NUM GET_PIN(E, 2)
 
 #define THREAD_STACK_SIZE   512
 #define THREAD_PRIORITY     10
 #define THREAD_TIMESLICE    5
 
 #define I2C_BUS_NAME        "i2c1"  //传感器连接的I2C总线设备名称
-#define MS1100_ADDR         0x90    //从机地址--读1写0
+#define MS1100_ADDR         0x48    //从机地址--读1写0
 
 static struct rt_i2c_bus_device *i2c_bus = RT_NULL; //I2C总线设备句柄
 static rt_bool_t initialized = RT_FALSE; //传感器初始状态
@@ -118,23 +120,23 @@ static void read_val(double *val)
     switch(0x03 & config_set)
     {
         case 0x00:
-            dr = 1;
+            pga = 1;
             rt_kprintf("pga = 00\n");
             break;
         case 0x01:
-            dr = 2;
+            pga = 2;
             rt_kprintf("pga = 01\n");
             break;
         case 0x02:
-            dr = 4;
+            pga = 4;
             rt_kprintf("pga = 10\n");
             break;
         case 0x03:
-            dr = 8;
+            pga = 8;
             rt_kprintf("pga = 11\n");
             break;
         default:
-            dr = 1;
+            pga = 1;
             break;
     }
 
@@ -146,6 +148,7 @@ static void ms1100_thread_entry(void *parameter)
 {
     double val = 0.0;
     rt_uint8_t led_status;
+    int temp = 0;
 
     if(!initialized) {
         ms1100_init();
@@ -157,8 +160,9 @@ static void ms1100_thread_entry(void *parameter)
 
             rt_kprintf("ms1100 init success\n");
             read_val(&val);
-            rt_kprintf("the ms1100 val is %d.%d\n", (int)val, (int)(val*10)%10);
-
+            temp = val*100;
+//            rt_kprintf("val is %d.%d\n", (int)val, (int)(val*10)%10);
+            rt_kprintf("val is %d.%d\n", temp/100, temp%100);
             rt_thread_mdelay(2000);
         }
     }
@@ -196,8 +200,6 @@ int ms1100(int argc, char *argv[])
     config_set = (high_byte_uint << 8) | low_byte_uint;
 
     rt_pin_mode(LED_PIN_NUM, PIN_MODE_OUTPUT);  //LED设置为输出模式
-
-//    rt_i2c_bus_device_register();
 
     ms1100_thread = rt_thread_create("ms1100_thread", ms1100_thread_entry, RT_NULL, THREAD_STACK_SIZE, THREAD_PRIORITY, THREAD_TIMESLICE);
     if(ms1100_thread != RT_NULL) {
